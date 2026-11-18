@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+
+# outputs
+*.html
+!src/preflop_matrix/template.html
+*.json
+!tests/**/*.json
+
+# never commit real data
+hand_histories/
+ranges/
+Ranges/
+*.db
+.env

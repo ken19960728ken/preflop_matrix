@@ -1,0 +1,25 @@
+[project]
+name = "preflop-matrix"
+version = "0.1.0"
+description = "6-max 翻前位置對位置頻率熱力圖（理論 / Hero / 玩家池）"
+readme = "README.md"
+authors = [
+    { name = "HsiangKuan", email = "ken19960728ken@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+preflop-matrix = "preflop_matrix.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.10.2,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

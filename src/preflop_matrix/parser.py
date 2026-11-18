@@ -14,6 +14,7 @@ RE_HEADER = re.compile(
 RE_TABLE = re.compile(r"^Table '[^']+' \d+-max Seat #(\d+) is the button$")
 RE_SEAT = re.compile(rf"^Seat (\d+): (.+?) \({_AMOUNT} in chips\)$")
 RE_POST = re.compile(rf"^(.+?): posts (small|big) blind {_AMOUNT}(?: and is all-in)?$")
+RE_HAND_ID = re.compile(r"^Poker Hand #(\S+):")
 RE_FOLD_CHECK = re.compile(r"^(.+?): (folds|checks)$")
 RE_CALL = re.compile(rf"^(.+?): calls {_AMOUNT}( and is all-in)?$")
 RE_RAISE = re.compile(rf"^(.+?): raises {_AMOUNT} to {_AMOUNT}( and is all-in)?$")
@@ -74,7 +75,7 @@ def _parse_action(line: str) -> Action:
 
 def parse_hand(block: str) -> Hand:
     """Parse the preflop part of one hand block."""
-    lines = block.replace("\r\n", "\n").strip().split("\n")
+    lines = [line.rstrip() for line in block.replace("\r\n", "\n").strip().split("\n")]
     header = RE_HEADER.match(lines[0])
     table = RE_TABLE.match(lines[1]) if len(lines) > 1 else None
     if not header or not table:
@@ -83,12 +84,12 @@ def parse_hand(block: str) -> Hand:
         raise ParseError("missing HOLE CARDS or SUMMARY section")
     seats: list[tuple[int, str]] = []
     actions: list[Action] = []
-    big_blind = None
+    posted: dict[str, str] = {}
     for line in lines[2:lines.index(HOLE_CARDS)]:
         if m := RE_SEAT.match(line):
             seats.append((int(m[1]), m[2]))
         elif m := RE_POST.match(line):
-            big_blind = _dec(m[3]) if m[2] == "big" else big_blind
+            posted[m[2]] = m[1]
         elif not RE_IGNORED.match(line):
             raise ParseError(f"unrecognised line before the deal: {line!r}")
     for line in lines[lines.index(HOLE_CARDS) + 1:]:
@@ -96,17 +97,19 @@ def parse_hand(block: str) -> Hand:
             break
         if line.strip() and not RE_IGNORED.match(line):
             actions.append(_parse_action(line))
-    if big_blind is None:
-        raise ParseError("no big blind posted")
     if len({name for _, name in seats}) != len(seats):
         raise ParseError("duplicate player name")
+    if len(seats) != TABLE_SIZE:
+        raise TableSizeError(f"{len(seats)} players (only {TABLE_SIZE}-handed hands are used)")
+    if all(num != int(table[1]) for num, _ in seats):
+        raise ParseError(f"button seat {table[1]} is empty")
     names = {name for _, name in seats}
     if unseated := {a.player for a in actions} - names:
-        raise ParseError(f"player not seated: {sorted(unseated)[0]!r}")
+        raise ParseError(f"player not seated: {min(unseated)!r}")
     positions = assign_positions(seats, int(table[1]))
-    if positions is None:
-        raise TableSizeError(f"{len(seats)} players (only {TABLE_SIZE}-handed hands are used)")
-    return Hand(header[1], f"{header[4]}-{header[5]}-{header[6]}", big_blind, positions, tuple(actions))
+    if positions.get(posted.get("small")) != "SB" or positions.get(posted.get("big")) != "BB":
+        raise ParseError("positions from the button disagree with the players who posted the blinds")
+    return Hand(header[1], f"{header[4]}-{header[5]}-{header[6]}", _dec(header[3]), positions, tuple(actions))
 
 
 @dataclass
@@ -133,12 +136,18 @@ def load_hands(root: Path) -> LoadResult:
     for path in sorted(root.rglob("*.txt")):
         result.files += 1
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = path.read_text(encoding="utf-8-sig", errors="replace")
         except OSError as err:
             result.unreadable_files += 1
             result.note_error(path.name, err)
             continue
         for block in split_hands(text):
+            hand_id = RE_HAND_ID.match(block)
+            if hand_id and hand_id[1] in seen:
+                result.duplicates += 1
+                continue
+            if hand_id:
+                seen.add(hand_id[1])
             try:
                 hand = parse_hand(block)
             except TableSizeError:
@@ -148,9 +157,5 @@ def load_hands(root: Path) -> LoadResult:
                 result.unparseable += 1
                 result.note_error(path.name, err)
                 continue
-            if hand.hand_id in seen:
-                result.duplicates += 1
-                continue
-            seen.add(hand.hand_id)
             result.hands.append(hand)
     return result

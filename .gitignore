@@ -19,3 +19,4 @@ ranges/
 Ranges/
 *.db
 .env
+*.txt

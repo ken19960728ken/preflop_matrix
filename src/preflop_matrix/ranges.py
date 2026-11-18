@@ -3,6 +3,7 @@
 A range maps each of the 169 hand classes (AA, AKs, AKo, ...) to the fraction of its combos played.
 Only two-player nodes are mapped; any file naming a third player is ignored.
 """
+import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -13,6 +14,7 @@ from preflop_matrix.classify import OPEN, VS_3BET, VS_4BET, VS_OPEN
 from preflop_matrix.positions import POSITION_INDEX
 
 RANKS = "AKQJT98765432"
+SUITS = "shdc"
 HANDS = tuple(RANKS[i] * 2 if i == j else RANKS[min(i, j)] + RANKS[max(i, j)] + ("s" if i < j else "o")
               for i in range(13) for j in range(13))
 TOTAL_COMBOS = 1326
@@ -25,8 +27,11 @@ def combos(hand: str) -> int:
 
 def hand_class(card_a: str, card_b: str) -> str:
     """'As', 'Kh' -> 'AKo'."""
-    if card_a[0] not in RANKS or card_b[0] not in RANKS:
-        raise ValueError(f"bad card: {card_a}{card_b}")
+    for card in (card_a, card_b):
+        if len(card) != 2 or card[0] not in RANKS or card[1] not in SUITS:
+            raise ValueError(f"bad card: {card!r}")
+    if card_a == card_b:
+        raise ValueError(f"the same card twice: {card_a}{card_b}")
     hi, lo = sorted((card_a, card_b), key=lambda c: RANKS.index(c[0]))
     if hi[0] == lo[0]:
         return hi[0] * 2
@@ -36,6 +41,7 @@ def hand_class(card_a: str, card_b: str) -> str:
 def parse_range_text(text: str) -> Range:
     """'AsAh: 1,KsKh: 0.5,...' -> {hand class: fraction of its combos}, capped at 1."""
     weight: dict[str, float] = defaultdict(float)
+    seen: set[frozenset[str]] = set()
     for token in text.replace("\n", ",").split(","):
         if not token.strip():
             continue
@@ -43,7 +49,15 @@ def parse_range_text(text: str) -> Range:
         cards = cards.strip()
         if len(cards) != 4:
             raise ValueError(f"bad combo: {token.strip()!r}")
-        weight[hand_class(cards[:2], cards[2:])] += float(value) if value.strip() else 1.0
+        cls = hand_class(cards[:2], cards[2:])
+        combo = frozenset((cards[:2], cards[2:]))
+        if combo in seen:
+            raise ValueError(f"duplicate combo: {cards}")
+        seen.add(combo)
+        w = float(value) if value.strip() else 1.0
+        if not math.isfinite(w) or w < 0:
+            raise ValueError(f"bad weight: {token.strip()!r}")
+        weight[cls] += w
     return {h: min(1.0, weight[h] / combos(h)) for h in HANDS}
 
 
@@ -56,15 +70,17 @@ class RangeKey(NamedTuple):
     node: str           # open | vs_open | vs_3bet | vs_4bet
     pos: str            # the acting position
     vs: str | None      # the opponent (None for open)
-    action: str         # raise (open) | call | 3bet | 4bet | 5bet | 5bet_allin
+    action: str         # raise (open) | call | 3bet | 4bet | 4bet_allin | 5bet | 5bet_allin
 
 
 _POS = "UTG|HJ|CO|BTN|SB|BB"
 _SIZE = r"\d+(?:\.\d+)?bb"
-RE_OPEN = re.compile(rf"^({_POS}) open {_SIZE}$", re.I)
-RE_VS_OPEN = re.compile(rf"^({_POS}) vs ({_POS}) open(?: {_SIZE})? (call|3bet|3b)(?: {_SIZE})?$")
-RE_VS_3BET = re.compile(rf"^({_POS}) vs ({_POS}) 3bet(?: {_SIZE})? (call|4bet)(?: {_SIZE})?$")
-RE_VS_4BET = re.compile(rf"^({_POS}) vs ({_POS}) 4bet(?: {_SIZE})? (call|5bet(?: 5bet)?(?: {_SIZE}| all ?in)?)$")
+RE_OPEN = re.compile(rf"^({_POS}) open {_SIZE}$", re.IGNORECASE)
+RE_VS_OPEN = re.compile(rf"^({_POS}) vs ({_POS}) open(?: {_SIZE})? (call|3bet|3b)(?: {_SIZE})?$", re.IGNORECASE)
+RE_VS_3BET = re.compile(
+    rf"^({_POS}) vs ({_POS}) 3bet(?: {_SIZE})? (call|4bet(?: 4bet)?(?: {_SIZE})?(?: all ?in)?)(?: {_SIZE})?$", re.IGNORECASE)
+RE_VS_4BET = re.compile(
+    rf"^({_POS}) vs ({_POS}) 4bet(?: {_SIZE})? (call|5bet(?: 5bet)?(?: {_SIZE})?(?: all ?in)?)$", re.IGNORECASE)
 
 
 def parse_filename(stem: str) -> RangeKey | None:
@@ -73,18 +89,27 @@ def parse_filename(stem: str) -> RangeKey | None:
     if m := RE_OPEN.match(stem):
         return RangeKey(OPEN, m[1].upper(), None, "raise")
     if m := RE_VS_OPEN.match(stem):
-        defender, opener, action = m[1], m[2], "3bet" if m[3] == "3b" else m[3]
-        return RangeKey(VS_OPEN, defender, opener, action) if _earlier(opener, defender) else None
+        defender, opener, action = m[1].upper(), m[2].upper(), m[3].lower()
+        if _earlier(opener, defender):
+            return RangeKey(VS_OPEN, defender, opener, "3bet" if action == "3b" else action)
+        return None
     if m := RE_VS_3BET.match(stem):
-        opener, three_bettor = m[1], m[2]
-        return RangeKey(VS_3BET, opener, three_bettor, m[3]) if _earlier(opener, three_bettor) else None
+        opener, three_bettor, action = m[1].upper(), m[2].upper(), m[3].lower()
+        if _earlier(opener, three_bettor):
+            return RangeKey(VS_3BET, opener, three_bettor, _raise_action(action, "4bet"))
+        return None
     if m := RE_VS_4BET.match(stem):
-        three_bettor, opener, action = m[1], m[2], m[3]
-        if not _earlier(opener, three_bettor):
-            return None
-        return RangeKey(VS_4BET, three_bettor, opener,
-                        "call" if action == "call" else "5bet_allin" if "all" in action else "5bet")
+        three_bettor, opener, action = m[1].upper(), m[2].upper(), m[3].lower()
+        if _earlier(opener, three_bettor):
+            return RangeKey(VS_4BET, three_bettor, opener, _raise_action(action, "5bet"))
     return None
+
+
+def _raise_action(action: str, name: str) -> str:
+    """'call' stays; '4bet ...' becomes '4bet' or, when the name says all in, '4bet_allin'."""
+    if action == "call":
+        return action
+    return f"{name}_allin" if "all" in action else name
 
 
 def _earlier(first: str, second: str) -> bool:
@@ -115,7 +140,7 @@ def load_ranges(root: Path) -> RangeBook:
             book.duplicates.append(path.name)
         else:
             try:
-                book.ranges[key] = parse_range_text(path.read_text(encoding="utf-8"))
+                book.ranges[key] = parse_range_text(path.read_text(encoding="utf-8-sig"))
             except (OSError, ValueError) as err:
                 book.unreadable.append(f"{path.name}: {err}")
     return book

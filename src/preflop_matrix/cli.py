@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from preflop_matrix.matrix import build_matrix
+from preflop_matrix.matrix import build_matrix, missing_actions
 from preflop_matrix.parser import LoadResult, load_hands
 from preflop_matrix.ranges import RangeBook, load_ranges
 from preflop_matrix.render import DEFAULT_TITLE, render_html
@@ -28,16 +28,17 @@ def _error(message: str) -> None:
 
 
 def _hands_summary(r: LoadResult) -> list[str]:
-    lines = [f"手牌：掃描 {r.files} 個檔案，採用 {len(r.hands)} 手；重複略過 {r.duplicates}、"
-             f"非 6 人桌排除 {r.not_six_max}、無法解析略過 {r.unparseable}、無法讀取的檔案 {r.unreadable_files}"]
+    lines = [(f"手牌：掃描 {r.files} 個檔案，採用 {len(r.hands)} 手；重複略過 {r.duplicates}、"
+              f"非 6 人桌排除 {r.not_six_max}、無法解析略過 {r.unparseable}、無法讀取的檔案 {r.unreadable_files}")]
     lines += [f"  無法解析範例：{s}" for s in r.error_samples]
     return lines
 
 
 def _ranges_summary(book: RangeBook) -> list[str]:
-    lines = [f"理論範圍：{book.files} 個檔案，對應到節點 {len(book.ranges)} 個；"
-             f"忽略（多人或不認得）{len(book.ignored)}、重複 {len(book.duplicates)}、無法讀取 {len(book.unreadable)}"]
+    lines = [(f"理論範圍：{book.files} 個檔案，對應到節點 {len(book.ranges)} 個；"
+              f"忽略（多人或不認得）{len(book.ignored)}、重複 {len(book.duplicates)}、無法讀取 {len(book.unreadable)}")]
     lines += [f"  無法讀取：{s}" for s in book.unreadable]
+    lines += [f"  理論範圍不完整：{s}" for s in missing_actions(book)]
     lines += [f"  重複的節點檔（只用第一個）：{s}" for s in book.duplicates]
     return lines
 
@@ -50,6 +51,9 @@ def main(argv: list[str] | None = None) -> int:
             _error(f"{label}資料夾不存在或不是資料夾：{path}")
             return EXIT_BAD_INPUT
 
+    if args.json_path and Path(args.json_path).expanduser().resolve() == Path(args.out).expanduser().resolve():
+        _error("--json 和 -o 不能指向同一個檔案")
+        return EXIT_BAD_INPUT
     loaded = load_hands(hands_dir)
     print("\n".join(_hands_summary(loaded)))
     if not loaded.hands:
@@ -62,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_FAILED
 
     data = build_matrix(loaded.hands, book, args.hero)
+    for warning in data["meta"]["warnings"]:
+        print(f"警告：{warning}", file=sys.stderr)
     if data["meta"]["hero_hands"] == 0:
         print(f"警告：所有手牌都沒有名為 {args.hero!r} 的玩家，「我」欄會是空的（可用 --hero 指定）", file=sys.stderr)
     try:

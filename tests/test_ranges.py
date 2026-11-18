@@ -1,8 +1,7 @@
 import pytest
-
 from helpers import range_text
-from preflop_matrix.ranges import (HANDS, RangeKey, combos, hand_class, load_ranges, parse_filename,
-                                   parse_range_text, total_share)
+
+from preflop_matrix.ranges import HANDS, RangeKey, combos, hand_class, load_ranges, parse_filename, parse_range_text, total_share
 
 
 def test_hand_classes():
@@ -24,7 +23,10 @@ def test_missing_weight_defaults_to_one_and_class_weight_is_capped():
     assert parse_range_text(range_text({"AA": 2}))["AA"] == 1
 
 
-@pytest.mark.parametrize("text", ["AsA: 1", "ZsAh: 1", "AsAh: lots"])
+@pytest.mark.parametrize("text", [
+    "AsA: 1", "ZsAh: 1", "AsAh: lots", "AsAh: nan", "AsAh: inf", "AsAh: -0.5",
+    "AxAh: 1", "AsAs: 1", "AsAh: 1,AhAs: 0.5", "AsAh: 1,AsAh: 1",
+])
 def test_bad_range_text_is_a_value_error(text):
     with pytest.raises(ValueError):
         parse_range_text(text)
@@ -36,6 +38,13 @@ def test_total_share():
 
 @pytest.mark.parametrize("stem, key", [
     ("BTN Open 2bb", RangeKey("open", "BTN", None, "raise")),
+    ("btn open 2BB", RangeKey("open", "BTN", None, "raise")),
+    ("bb VS btn OPEN 2bb CALL", RangeKey("vs_open", "BB", "BTN", "call")),
+    ("Btn vs Bb 3Bet 9.5bb 4Bet 22bb", RangeKey("vs_3bet", "BTN", "BB", "4bet")),
+    ("Bb vs Btn 4Bet 22bb 5Bet All In", RangeKey("vs_4bet", "BB", "BTN", "5bet_allin")),
+    ("BTN vs BB 3bet 9.5bb 4bet all in", RangeKey("vs_3bet", "BTN", "BB", "4bet_allin")),
+    ("BTN vs BB 3bet 9.5bb 4bet allin", RangeKey("vs_3bet", "BTN", "BB", "4bet_allin")),
+    ("BTN vs BB 3bet 9.5bb 4bet 22bb all in", RangeKey("vs_3bet", "BTN", "BB", "4bet_allin")),
     ("SB Open 3bb", RangeKey("open", "SB", None, "raise")),
     ("BB vs BTN open 2bb call", RangeKey("vs_open", "BB", "BTN", "call")),
     ("BB vs BTN open 2bb 3bet 9.5bb", RangeKey("vs_open", "BB", "BTN", "3bet")),
@@ -93,3 +102,15 @@ def test_load_ranges_buckets_every_file(tmp_path):
     assert book.ignored == ["BB vs UTG open 2bb SB call call.txt"]
     assert len(book.unreadable) == 1 and "BTN Open 2bb.txt" in book.unreadable[0]
     assert book.get("open", "BTN", None, "raise") is None
+
+
+def test_files_with_a_byte_order_mark_are_read(tmp_path):
+    (tmp_path / "UTG Open 2bb.txt").write_bytes("\ufeffAsAh: 1".encode("utf-8"))
+    assert load_ranges(tmp_path).get("open", "UTG", None, "raise")["AA"] == pytest.approx(1 / 6)
+
+
+def test_a_file_with_a_bad_weight_is_unreadable_not_fatal(tmp_path):
+    (tmp_path / "UTG Open 2bb.txt").write_text("AsAh: nan")
+    (tmp_path / "HJ Open 2bb.txt").write_text("AsAh: 1")
+    book = load_ranges(tmp_path)
+    assert list(book.ranges) == [RangeKey("open", "HJ", None, "raise")] and len(book.unreadable) == 1

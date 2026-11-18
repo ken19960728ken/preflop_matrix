@@ -54,6 +54,14 @@ preflop-matrix --hands <GG手牌資料夾> --ranges <理論範圍資料夾> -o o
 - `vs_3bet`：以開池範圍為分母，Σ 開池權重 × 條件頻率 ÷ Σ 開池 combos。
 - `vs_4bet`：以 3bettor 對該開池者的 3bet 範圍為底。5bet 範圍＝「5bet」＋「5bet all in」兩檔相加（上限 1）。
 - `vs_5bet`：沒有理論。
+- 一個節點只要至少有一個動作檔（例如只有 call 沒有 3bet），缺的動作視為權重 0，並在摘要列出「缺某動作，已當 0」；
+  前提是底範圍（開池／3bet）存在。跟注 + 加注超過 1（容差 1e-6）時發出警告並按比例縮回 1。
+
+### 原始空間
+
+HTML 第二部分把條件頻率乘回前一步，換成「佔全部 1326 種起手牌的 %」（面對 3bet＝開池率 × 條件頻率；
+面對 4bet＝自己的 3bet 率 × 條件頻率；面對 5bet＝開池率 × 自己的 4bet 率 × 條件頻率）。
+`--json` 的 `absolute` 欄位有相同的數字（`reach`、`f`、`c`、`r`、`n`，依 th / me / pool）。
 
 後兩街的範圍檔給的是「該手牌在所有發牌中」的權重（已含前一層的篩選），所以每手牌的權重先截在底範圍權重以內，
 等同「條件頻率 = min(1, 檔案權重 / 底範圍權重)」。
@@ -61,13 +69,14 @@ preflop-matrix --hands <GG手牌資料夾> --ranges <理論範圍資料夾> -o o
 ## 範圍檔命名規則
 
 檔名（不含 `.txt`）對應到節點；內容為 `AsAh: 1,KsKh: 0.5,...`（combo: 權重，省略權重視為 1）。
+檔名不分大小寫；內容的花色必須是 `shdc`，同一個 combo 不可重複，權重必須是 ≥ 0 的有限數字，否則該檔視為無法讀取。
 尺寸 token 為 `2bb`、`9.5bb` 這類，可省略。
 
 | 檔名 | 節點 |
 |---|---|
 | `BTN Open 2bb` | `open` BTN |
 | `BB vs BTN open [2bb] call` / `3bet [9.5bb]`（`3b` 也可） | `vs_open`：BB 面對 BTN 開池 |
-| `BTN vs BB 3bet 9.5bb call` / `4bet 22bb` | `vs_3bet`：BTN 開池，面對 BB 的 3bet |
+| `BTN vs BB 3bet 9.5bb call` / `4bet 22bb` / `4bet all in`（與 4bet 檔相加） | `vs_3bet`：BTN 開池，面對 BB 的 3bet |
 | `BB vs BTN 4bet 22bb call` / `5bet [5bet] 46bb` / `5bet all in` | `vs_4bet`：BB（3bettor）面對 BTN 的 4bet |
 
 第一個位置是做決策的人；`vs_open` 與 `vs_4bet` 的第二個位置是對手，`vs_3bet` 的第二個位置是 3bettor。
@@ -78,6 +87,7 @@ preflop-matrix --hands <GG手牌資料夾> --ranges <理論範圍資料夾> -o o
 ## 限制
 
 - 只支援 GG／Natural8 Rush & Cash 格式（`Poker Hand #...` + 6 人桌）；只解析翻前。
-- 只採用 6 人桌手牌。
+- 只採用 6 人桌手牌；從按鈕推出的位置若和貼 SB／BB 的玩家不一致，該手視為無法解析。
+- `--json` 與 `-o` 不可指向同一個檔案。
 - 頁面使用 Google Fonts，離線時退回系統字型。
 - HTML 樣板不含針對特定資料集撰寫的文字評論。

@@ -3,8 +3,8 @@ import subprocess
 import sys
 
 import pytest
-
 from helpers import calls, folds, make_hand, raises
+
 from preflop_matrix.cli import main
 
 RFI_REST = [folds("HJ"), folds("CO"), folds("BTN"), folds("SB")]
@@ -46,9 +46,30 @@ def test_end_to_end(hands_dir, ranges_dir, tmp_path, capsys):
     assert data["meta"]["hands"] == 3
 
 
+def test_json_and_html_cannot_be_the_same_file(hands_dir, ranges_dir, tmp_path, capsys):
+    same = tmp_path / "x.html"
+    assert run("--hands", hands_dir, "--ranges", ranges_dir, "-o", same, "--json", tmp_path / "." / "x.html") == 2
+    assert "不能指向同一個檔案" in capsys.readouterr().err
+    assert not same.exists()
+
+
+def test_summary_lists_incomplete_theory_and_json_has_absolute_data(hands_dir, ranges_dir, tmp_path, capsys):
+    data_path = tmp_path / "m.json"
+    assert run("--hands", hands_dir, "--ranges", ranges_dir, "-o", tmp_path / "o.html", "--json", data_path) == 0
+    assert "理論範圍不完整：vs_open UTG>BB 缺 3bet" not in capsys.readouterr().out
+    assert set(json.loads(data_path.read_text())["absolute"]) == {"vs_3bet", "vs_4bet", "vs_5bet"}
+
+
+def test_summary_reports_a_missing_action(hands_dir, write_ranges, tmp_path, capsys):
+    ranges = write_ranges({"BB vs UTG open 2bb call": {"AA": 1}})
+    assert run("--hands", hands_dir, "--ranges", ranges, "-o", tmp_path / "o.html") == 0
+    assert "理論範圍不完整：vs_open UTG>BB 缺 3bet，已當 0" in capsys.readouterr().out
+
+
 def test_hero_option(hands_dir, ranges_dir, tmp_path, capsys):
     data_path = tmp_path / "m.json"
-    assert run("--hands", hands_dir, "--ranges", ranges_dir, "-o", tmp_path / "o.html", "--hero", "p_UTG", "--json", data_path) == 0
+    args = ("--hands", hands_dir, "--ranges", ranges_dir, "-o", tmp_path / "o.html", "--hero", "p_UTG", "--json", data_path)
+    assert run(*args) == 0
     utg = json.loads(data_path.read_text())["open"]["UTG"]
     assert utg["me"] == {"r": pytest.approx(2 / 3), "n": 3} and utg["pool"] is None
     assert run("--hands", hands_dir, "--ranges", ranges_dir, "-o", tmp_path / "o.html", "--hero", "Nobody") == 0
@@ -127,5 +148,5 @@ def test_missing_required_arguments_exit_2(capsys):
 
 
 def test_module_entry_point_runs():
-    result = subprocess.run([sys.executable, "-m", "preflop_matrix.cli", "--help"], capture_output=True, text=True)
+    result = subprocess.run([sys.executable, "-m", "preflop_matrix.cli", "--help"], capture_output=True, text=True, check=False)
     assert result.returncode == 0 and "--hands" in result.stdout

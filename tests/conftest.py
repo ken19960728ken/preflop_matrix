@@ -2,7 +2,6 @@ from itertools import count
 from pathlib import Path
 
 import pytest
-
 from helpers import range_text
 
 

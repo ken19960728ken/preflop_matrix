@@ -22,9 +22,13 @@ def _texts(data: dict, title: str) -> dict[str, str]:
     }
 
 
+def _fill(part: str, texts: dict[str, str]) -> str:
+    return _PLACEHOLDER.sub(lambda m: texts[m[1]], part)
+
+
 def render_html(data: dict, title: str = DEFAULT_TITLE) -> str:
     template = files("preflop_matrix").joinpath("template.html").read_text(encoding="utf-8")
     texts = {k: html.escape(v) for k, v in _texts(data, title).items()}
-    page = _PLACEHOLDER.sub(lambda m: texts[m[1]], template)
     payload = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
-    return page.replace(DATA_MARK, payload)
+    before, after = template.split(DATA_MARK, 1)
+    return _fill(before, texts) + payload + _fill(after, texts)

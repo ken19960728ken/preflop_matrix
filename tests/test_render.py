@@ -19,6 +19,20 @@ def test_render_embeds_data_and_fills_placeholders():
     assert page.startswith("<!doctype html>")
 
 
+def test_data_mark_or_placeholders_in_user_text_do_not_leak():
+    data = build_matrix([], RangeBook(), "{{TITLE}}")
+    page = render_html(data, "/*DATA*/null {{FOOTNOTE}}")
+    assert payload(page) == data
+    assert "<title>/*DATA*/null {{FOOTNOTE}}</title>" in page
+    assert page.count("const D = ") == 1
+
+
+def test_render_includes_the_original_space_section_without_canned_commentary():
+    page = render_html(build_matrix([], RangeBook(), "Hero"))
+    assert 'id="a-3b"' in page and 'id="a-4b"' in page and 'id="a-5b"' in page and "awall(" in page
+    assert "ka-3b" not in page and "ka-4b" not in page and "k-open" not in page
+
+
 def test_render_escapes_script_terminators_in_data():
     data = build_matrix([], RangeBook(), "x</script><b>")
     page = render_html(data)

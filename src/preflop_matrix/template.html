@@ -52,6 +52,11 @@ table.t tr:last-child td { border-bottom: 0; }
 ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 80ch; }
 /* phone captions */
 @media (max-width: 820px) { .mx caption { display: table-caption; } }
+.wall.w4 { grid-template-columns: 90px repeat(4, minmax(0, 1fr)); }
+@media (max-width: 820px) { .wall.w4 { grid-template-columns: 1fr; } }
+.part { border-top: 2px solid var(--line); padding-top: 28px; display: grid; gap: 12px; }
+table.t td small { display: block; font-size: 9px; color: var(--muted); line-height: 1; }
+table.t td.thin { background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(127,127,127,.18) 4px 5px); }
 </style>
 </head>
 <body>
@@ -73,6 +78,13 @@ ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 80ch; }
   <section><h2>開池後面對 3bet（不含 squeeze）</h2><div class="wall" id="w-3b"></div></section>
   <section><h2>3bet 後面對 4bet</h2><p class="cap">列＝開池並 4bet 的人，欄＝3bet 後要回應的人。斜線＝樣本 &lt;100。</p><div class="wall" id="w-4b"></div></section>
   <section><h2>4bet 後面對 5bet</h2><p class="cap">R&amp;C 沒有這一層的理論範圍，所以改成「我｜玩家池｜我 − 玩家池」。列＝4bet 後要回應的開池者，欄＝5bet 的人。斜線＝樣本 &lt;20。</p><div class="wall" id="w-5b"></div></section>
+  <div class="part"><div class="eyebrow">第二部分</div><h2>原始空間：佔全部起手牌的 %</h2>
+    <p>上面的頻率都是條件機率：面對 3bet 的頻率以「自己的開池範圍」為分母，面對 4bet 以「自己的 3bet 範圍」為分母。前一步的範圍比理論窄，條件頻率就會被放大。這裡把每一步乘回前一步，換成「全部 1326 種起手牌裡，有多少走到這個動作」：</p>
+    <ul><li>面對 3bet：開池率 × 條件頻率</li><li>面對 4bet：自己的 3bet 率 × 條件頻率</li><li>面對 5bet：開池率 × 自己的 4bet 率 × 條件頻率</li></ul>
+    <p class="cap">第一欄「到達」＝進入此節點的範圍佔全部手牌的 %。第一列是理論 %；第二、三列是倍數（實際 ÷ 理論，紅＞1、藍＜1，色階 ×0.35～×2.8），小字是實際 %。面對開池本來就是全部手牌，不用換算。</p></div>
+  <section><h2>原始空間・開池後面對 3bet</h2><div class="wall w4" id="a-3b"></div></section>
+  <section><h2>原始空間・3bet 後面對 4bet</h2><p class="cap">列＝開池並 4bet 的人，欄＝3bet 後要回應的人。到達＝回應者自己的 3bet 率。</p><div class="wall w4" id="a-4b"></div></section>
+  <section><h2>原始空間・4bet 後面對 5bet</h2><p class="cap">無理論，改成「我｜玩家池｜我 ÷ 玩家池」。到達＝開池率 × 自己的 4bet 率。</p><div class="wall w4" id="a-5b"></div></section>
   <p class="cap">{{FOOTNOTE}}</p>
 </div>
 
@@ -117,11 +129,59 @@ wall("w-3b", "vs_3bet", [["f", "棄牌"], ["c", "跟注"], ["r", "4bet"]], 300);
 wall("w-4b", "vs_4bet", [["f", "棄牌"], ["c", "跟注"], ["r", "5bet"]], 100);
 wall("w-5b", "vs_5bet", [["f", "棄牌"], ["c", "跟注"], ["r", "6bet"]], 20, [["me", "我", "me"], ["pool", "玩家池", "pool"], ["me", "我 − 玩家池", "pool"]]);
 
-const fmt = x => x == null ? "–" : (x * 100).toFixed(1) + "%";
-const gap = (x, t) => x == null || t == null ? `<td>–</td>` : `<td style="${dif(x - t)}">${((x - t) * 100).toFixed(1)}</td>`;
+const cellN = (x, thin) => x == null ? `<td>–</td>` : `<td class="${x.n < thin ? "thin" : ""}">${(x.r * 100).toFixed(1)}%<small>n=${x.n}</small></td>`;
+const gap = (x, t) => x == null || t == null ? `<td>–</td>` : `<td class="${x.n < 300 ? "thin" : ""}" style="${dif(x.r - t)}">${((x.r - t) * 100).toFixed(1)}</td>`;
 $("rfi").innerHTML = `<tr><th>位置</th><th>理論</th><th>我</th><th>我 − 理論</th><th>玩家池</th><th>玩家池 − 理論</th></tr>` +
-  POS.slice(0, 5).map(p => { const o = D.open[p], t = o.th && o.th.r, m = o.me && o.me.r, q = o.pool && o.pool.r;
-    return `<tr><td>${p}</td><td>${fmt(t)}</td><td>${fmt(m)}</td>${gap(m, t)}<td>${fmt(q)}</td>${gap(q, t)}</tr>`; }).join("");
+  POS.slice(0, 5).map(p => { const o = D.open[p], t = o.th && o.th.r;
+    return `<tr><td>${p}</td><td>${t == null ? "–" : (t * 100).toFixed(1) + "%"}</td>${cellN(o.me, 300)}${gap(o.me, t)}${cellN(o.pool, 300)}${gap(o.pool, t)}</tr>`; }).join("");
+
+// ---------- original-space (unconditional) matrices ----------
+function prior(sec, op, de, who) {
+  try {
+    if (sec === "vs_3bet") return D.open[op][who].r;
+    if (sec === "vs_4bet") return D.vs_open[`${op}>${de}`][who].r;
+    if (sec === "vs_5bet") return D.open[op][who].r * D.vs_3bet[`${op}>${de}`][who].r;
+  } catch (e) { return null; }
+  return null;
+}
+function absv(sec, op, de, who, k) {
+  const x = (D[sec][`${op}>${de}`] || {})[who]; const p = prior(sec, op, de, who);
+  if (!x || p == null || isNaN(p)) return null;
+  return k === "reach" ? p : p * (k === "f" ? 1 - x.c - x.r : x[k]);
+}
+const ap = v => { const q = v * 100; return q >= 10 ? q.toFixed(0) : q >= 0.995 ? q.toFixed(1) : q.toFixed(2); };
+function ratioStyle(r) { const l = Math.max(-1.5, Math.min(1.5, Math.log2(r))); const a = Math.abs(l) / 1.5 * .8 + .04;
+  return `background:rgba(var(${l >= 0 ? "--pos" : "--neg"}),${a.toFixed(3)})`; }
+function amatrix(sec, who, k, title, thin, base) {
+  const ops = POS.slice(0, 5), des = POS.slice(1);
+  let mx = 0; for (const op of ops) for (const de of des) { const v = absv(sec, op, de, base, k); if (v != null && v > mx) mx = v; }
+  let h = `<table class="mx"><caption>${title}</caption><tr><th></th>${des.map(d => `<th>${d}</th>`).join("")}</tr>`;
+  for (const op of ops) {
+    h += `<tr><th class="r">${op}</th>`;
+    for (const de of des) {
+      const cell = D[sec][`${op}>${de}`]; const t = absv(sec, op, de, base, k);
+      if (!cell || t == null) { h += `<td class="na"></td>`; continue; }
+      if (who === base) { const nb = cell[base].n;
+        h += `<td class="${nb !== undefined && nb < thin ? "thin" : ""}" style="background:rgba(var(--lvl),${(0.05 + (mx ? t / mx : 0) * .8).toFixed(3)})" title="${nb !== undefined ? "n=" + nb : ""}">${ap(t)}</td>`; continue; }
+      const v = absv(sec, op, de, who, k); if (v == null || !t) { h += `<td class="na"></td>`; continue; }
+      const r = v / t, n = cell[who].n;
+      h += `<td class="${n < thin ? "thin" : ""}" style="${ratioStyle(r)}" title="${who === "me" ? "我" : "玩家池"} ${ap(v)}%／${base === "th" ? "理論" : "玩家池"} ${ap(t)}%（n=${n}）">×${r.toFixed(r >= 10 ? 0 : 1)}<small>${ap(v)}</small></td>`;
+    }
+    h += `</tr>`;
+  }
+  return h + `</table>`;
+}
+function awall(id, sec, acts, thin, rows) {
+  rows = rows || [["th", "理論 %", "th"], ["me", "我 ÷ 理論", "th"], ["pool", "玩家池 ÷ 理論", "th"]];
+  acts = [["reach", "到達"]].concat(acts);
+  let h = `<div></div>` + acts.map(a => `<div class="ch">${a[1]}</div>`).join("");
+  for (const [who, lab, base] of rows)
+    h += `<div class="rh">${lab}</div>` + acts.map(([k, name]) => `<div>${amatrix(sec, who, k, lab + "・" + name, thin, base)}</div>`).join("");
+  $(id).innerHTML = h;
+}
+awall("a-3b", "vs_3bet", [["f", "棄牌"], ["c", "跟注"], ["r", "4bet"]], 300);
+awall("a-4b", "vs_4bet", [["f", "棄牌"], ["c", "跟注"], ["r", "5bet"]], 100);
+awall("a-5b", "vs_5bet", [["f", "棄牌"], ["c", "跟注"], ["r", "6bet"]], 20, [["me", "我 %", "me"], ["pool", "玩家池 %", "pool"], ["me", "我 ÷ 玩家池", "pool"]]);
 </script>
 </body>
 </html>

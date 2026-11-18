@@ -10,7 +10,9 @@ def make_hand(actions, hand_id="RC1", hero="BB", day="2026/10/06", seats=SEAT_PO
 
     The player sitting at `hero` is called Hero, everybody else p_<position>.
     """
-    name = lambda pos: "Hero" if pos == hero else f"p_{pos}"
+    def name(pos):
+        return "Hero" if pos == hero else f"p_{pos}"
+
     lines = [f"Poker Hand #{hand_id}: Hold'em No Limit ($0.05/$0.1) - {day} 06:55:22",
              f"Table 'RushAndCash1' 6-max Seat #{button} is the button"]
     lines += [f"Seat {i}: {name(pos)} ($10 in chips)" for i, pos in enumerate(seats, start=1)]

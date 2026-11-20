@@ -4,6 +4,7 @@ import json
 import sys
 from pathlib import Path
 
+from preflop_matrix.config import ENV_VAR, default_ranges_dir, resolve_ranges_dir
 from preflop_matrix.matrix import build_matrix, missing_actions
 from preflop_matrix.parser import LoadResult, load_hands
 from preflop_matrix.ranges import RangeBook, load_ranges
@@ -15,7 +16,8 @@ EXIT_BAD_INPUT, EXIT_FAILED = 2, 1
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="preflop-matrix", description="6-max 翻前位置矩陣熱力圖（理論 / Hero / 玩家池）")
     p.add_argument("--hands", required=True, metavar="DIR", help="GG 手牌資料夾（遞迴掃描 .txt）")
-    p.add_argument("--ranges", required=True, metavar="DIR", help="理論範圍資料夾（.txt）")
+    p.add_argument("--ranges", metavar="DIR",
+                   help=f"理論範圍資料夾（.txt）。省略時依序用環境變數 {ENV_VAR}、預設資料夾 {default_ranges_dir()}")
     p.add_argument("-o", "--out", default="preflop_matrix.html", metavar="FILE", help="輸出 HTML（預設 preflop_matrix.html）")
     p.add_argument("--hero", default="Hero", help="Hero 的玩家名稱（預設 Hero）")
     p.add_argument("--title", default=DEFAULT_TITLE, help=f"頁面標題（預設 {DEFAULT_TITLE}）")
@@ -45,11 +47,18 @@ def _ranges_summary(book: RangeBook) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    hands_dir, ranges_dir = Path(args.hands).expanduser(), Path(args.ranges).expanduser()
-    for label, path in (("手牌", hands_dir), ("理論範圍", ranges_dir)):
-        if not path.is_dir():
-            _error(f"{label}資料夾不存在或不是資料夾：{path}")
-            return EXIT_BAD_INPUT
+    hands_dir = Path(args.hands).expanduser()
+    source = resolve_ranges_dir(args.ranges)
+    ranges_dir = source.path
+    if not hands_dir.is_dir():
+        _error(f"手牌資料夾不存在或不是資料夾：{hands_dir}")
+        return EXIT_BAD_INPUT
+    if not ranges_dir.is_dir():
+        hint = {"預設資料夾": f"；請用 --ranges 指定、設定環境變數 {ENV_VAR}，或把範圍檔放到 {default_ranges_dir()}（見 docs/RANGES.md）",
+                f"環境變數 {ENV_VAR}": f"；請修正或 unset {ENV_VAR}（見 docs/RANGES.md）"}.get(source.origin, "")
+        _error(f"理論範圍資料夾不存在或不是資料夾（來源：{source.origin}）：{ranges_dir}{hint}")
+        return EXIT_BAD_INPUT
+    print(f"理論範圍來源：{source.origin} → {ranges_dir}")
 
     if args.json_path and Path(args.json_path).expanduser().resolve() == Path(args.out).expanduser().resolve():
         _error("--json 和 -o 不能指向同一個檔案")

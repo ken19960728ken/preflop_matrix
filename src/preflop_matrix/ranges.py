@@ -75,7 +75,7 @@ class RangeKey(NamedTuple):
 
 _POS = "UTG|HJ|CO|BTN|SB|BB"
 _SIZE = r"\d+(?:\.\d+)?bb"
-RE_OPEN = re.compile(rf"^({_POS}) open {_SIZE}$", re.IGNORECASE)
+RE_OPEN = re.compile(rf"^({_POS}) open(?: {_SIZE})?$", re.IGNORECASE)
 RE_VS_OPEN = re.compile(rf"^({_POS}) vs ({_POS}) open(?: {_SIZE})? (call|3bet|3b)(?: {_SIZE})?$", re.IGNORECASE)
 RE_VS_3BET = re.compile(
     rf"^({_POS}) vs ({_POS}) 3bet(?: {_SIZE})? (call|4bet(?: 4bet)?(?: {_SIZE})?(?: all ?in)?)(?: {_SIZE})?$", re.IGNORECASE)

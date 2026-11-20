@@ -143,10 +143,44 @@ def test_unwritable_output_is_exit_1(hands_dir, ranges_dir, tmp_path, capsys):
 
 def test_missing_required_arguments_exit_2(capsys):
     with pytest.raises(SystemExit) as exc:
-        run("--hands", "x")
+        run("--ranges", "x")
     assert exc.value.code == 2
 
 
 def test_module_entry_point_runs():
     result = subprocess.run([sys.executable, "-m", "preflop_matrix.cli", "--help"], capture_output=True, text=True, check=False)
     assert result.returncode == 0 and "--hands" in result.stdout
+
+
+def test_ranges_default_folder_is_used_when_omitted(hands_dir, ranges_dir, tmp_path, monkeypatch, capsys):
+    import shutil
+    monkeypatch.delenv("PREFLOP_MATRIX_RANGES", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    shutil.copytree(ranges_dir, tmp_path / "cfg" / "preflop-matrix" / "ranges")
+    assert run("--hands", hands_dir, "-o", tmp_path / "o.html") == 0
+    out = capsys.readouterr().out
+    assert "預設資料夾" in out and str(tmp_path / "cfg" / "preflop-matrix" / "ranges") in out
+
+
+def test_env_var_beats_default_and_flag_beats_env(hands_dir, ranges_dir, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "nothing-here"))
+    monkeypatch.setenv("PREFLOP_MATRIX_RANGES", str(ranges_dir))
+    assert run("--hands", hands_dir, "-o", tmp_path / "o.html") == 0
+    assert "環境變數 PREFLOP_MATRIX_RANGES" in capsys.readouterr().out
+    monkeypatch.setenv("PREFLOP_MATRIX_RANGES", str(tmp_path / "missing"))
+    assert run("--hands", hands_dir, "--ranges", ranges_dir, "-o", tmp_path / "o.html") == 0
+    assert "參數 --ranges" in capsys.readouterr().out
+
+
+def test_missing_default_folder_explains_how_to_set_it_up(hands_dir, tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("PREFLOP_MATRIX_RANGES", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    assert run("--hands", hands_dir, "-o", tmp_path / "o.html") == 2
+    err = capsys.readouterr().err
+    assert "預設資料夾" in err and "docs/RANGES.md" in err
+
+
+def test_env_var_pointing_nowhere_says_to_fix_the_env_var(hands_dir, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PREFLOP_MATRIX_RANGES", str(tmp_path / "missing"))
+    assert run("--hands", hands_dir, "-o", tmp_path / "o.html") == 2
+    assert "unset PREFLOP_MATRIX_RANGES" in capsys.readouterr().err

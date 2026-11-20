@@ -114,3 +114,9 @@ def test_a_file_with_a_bad_weight_is_unreadable_not_fatal(tmp_path):
     (tmp_path / "HJ Open 2bb.txt").write_text("AsAh: 1")
     book = load_ranges(tmp_path)
     assert list(book.ranges) == [RangeKey("open", "HJ", None, "raise")] and len(book.unreadable) == 1
+
+
+def test_open_file_without_a_size_still_maps():
+    from preflop_matrix.ranges import parse_filename
+    key = parse_filename("BTN Open")
+    assert key is not None and key.node == "open" and key.pos == "BTN"

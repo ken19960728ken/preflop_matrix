@@ -16,12 +16,14 @@ uv run preflop-matrix ...  # 或在專案內直接執行
 
 ```bash
 preflop-matrix --hands <GG手牌資料夾> --ranges <理論範圍資料夾> -o out.html
+# 設好預設範圍資料夾後可省略 --ranges
+preflop-matrix --hands <GG手牌資料夾>
 ```
 
 | 參數 | 說明 |
 |---|---|
 | `--hands DIR` | 必填。遞迴掃描 `.txt`，同一 hand id 只算一次 |
-| `--ranges DIR` | 必填。理論範圍 `.txt` |
+| `--ranges DIR` | 理論範圍 `.txt`。省略時依序用環境變數 `PREFLOP_MATRIX_RANGES`、預設資料夾 `~/.config/preflop-matrix/ranges`（見 [docs/RANGES.md](docs/RANGES.md)） |
 | `-o, --out FILE` | 輸出 HTML，預設 `preflop_matrix.html` |
 | `--hero NAME` | Hero 的玩家名稱，預設 `Hero` |
 | `--title TEXT` | 頁面標題 |
@@ -68,9 +70,11 @@ HTML 第二部分把條件頻率乘回前一步，換成「佔全部 1326 種起
 
 ## 範圍檔命名規則
 
+範圍需要哪些檔、檔名與內容格式、權重的意義、預設資料夾怎麼設定：見 **[docs/RANGES.md](docs/RANGES.md)**。範圍檔不放進 repo。
+
 檔名（不含 `.txt`）對應到節點；內容為 `AsAh: 1,KsKh: 0.5,...`（combo: 權重，省略權重視為 1）。
 檔名不分大小寫；內容的花色必須是 `shdc`，同一個 combo 不可重複，權重必須是 ≥ 0 的有限數字，否則該檔視為無法讀取。
-尺寸 token 為 `2bb`、`9.5bb` 這類，可省略。
+尺寸 token 為 `2bb`、`9.5bb` 這類，可省略（含 `open` 檔）。
 
 | 檔名 | 節點 |
 |---|---|

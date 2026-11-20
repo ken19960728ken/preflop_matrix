@@ -38,8 +38,10 @@ def _hands_summary(r: LoadResult) -> list[str]:
 
 def _ranges_summary(book: RangeBook) -> list[str]:
     lines = [(f"理論範圍：{book.files} 個檔案，對應到節點 {len(book.ranges)} 個；"
-              f"忽略（多人或不認得）{len(book.ignored)}、重複 {len(book.duplicates)}、無法讀取 {len(book.unreadable)}")]
+              f"忽略（多人或不認得）{len(book.ignored)}、重複 {len(book.duplicates)}、無法讀取 {len(book.unreadable)}、"
+              f"未填（空白檔）{len(book.unfilled)}")]
     lines += [f"  無法讀取：{s}" for s in book.unreadable]
+    lines += [f"  未填（空白檔）：{s}" for s in book.unfilled]
     lines += [f"  理論範圍不完整：{s}" for s in missing_actions(book)]
     lines += [f"  重複的節點檔（只用第一個）：{s}" for s in book.duplicates]
     return lines

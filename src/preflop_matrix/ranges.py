@@ -123,24 +123,37 @@ class RangeBook:
     ignored: list[str] = field(default_factory=list)      # not a two-player node
     duplicates: list[str] = field(default_factory=list)   # a second file for an already mapped node
     unreadable: list[str] = field(default_factory=list)   # mapped but could not be read or parsed
+    unfilled: list[str] = field(default_factory=list)     # mapped but blank (only whitespace / a BOM): not filled in yet
 
     def get(self, node: str, pos: str, vs: str | None, action: str) -> Range | None:
         return self.ranges.get(RangeKey(node, pos, vs, action))
 
 
 def load_ranges(root: Path) -> RangeBook:
-    """Read every .txt under root and keep the files that map to a two-player node."""
+    """Read every .txt under root and keep the files that map to a two-player node.
+
+    A blank file is "not filled in yet": it never takes its node, so a later file for the same node can.
+    """
     book = RangeBook()
     for path in sorted(root.rglob("*.txt")):
         book.files += 1
         key = parse_filename(path.stem)
         if key is None:
             book.ignored.append(path.name)
+            continue
+        try:
+            text, error = path.read_text(encoding="utf-8-sig"), None
+        except (OSError, ValueError) as err:
+            text, error = None, err
+        if text is not None and not text.strip():
+            book.unfilled.append(path.name)
         elif key in book.ranges:
             book.duplicates.append(path.name)
+        elif text is None:
+            book.unreadable.append(f"{path.name}: {error}")
         else:
             try:
-                book.ranges[key] = parse_range_text(path.read_text(encoding="utf-8-sig"))
-            except (OSError, ValueError) as err:
+                book.ranges[key] = parse_range_text(text)
+            except ValueError as err:
                 book.unreadable.append(f"{path.name}: {err}")
     return book

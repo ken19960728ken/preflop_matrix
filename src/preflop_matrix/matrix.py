@@ -7,7 +7,7 @@ Output layout (same as the HTML template expects):
              the same frequencies as a share of all dealt hands (the conditional frequency times the
              probability of reaching the node)
   meta:      hands, hero, hero_hands, date_from, date_to, warnings
-A missing theory or no observations is None.
+A missing theory or no observations is None. vs_5bet has no theory: only me / pool.
 """
 from collections import Counter
 from collections.abc import Iterable
@@ -52,8 +52,10 @@ def _union(*ranges: Range | None) -> Range | None:
 def _inputs(node: str, a: str, b: str, book: RangeBook) -> tuple[Range | None, tuple[Range | None, Range | None]]:
     """(base range, (first action range, second action range)) for the cell where `a` is the earlier position.
 
-    vs_open has no base range (the actions are shares of all hands).
+    vs_open has no base range (the actions are shares of all hands). vs_5bet has no theory at all.
     """
+    if node == VS_5BET:
+        return None, (None, None)
     if node == VS_OPEN:
         return None, (book.get(VS_OPEN, b, a, "call"), book.get(VS_OPEN, b, a, "3bet"))
     if node == VS_3BET:

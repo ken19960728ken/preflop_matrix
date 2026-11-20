@@ -66,6 +66,24 @@ def test_summary_reports_a_missing_action(hands_dir, write_ranges, tmp_path, cap
     assert "理論範圍不完整：vs_open UTG>BB 缺 3bet，已當 0" in capsys.readouterr().out
 
 
+def test_summary_lists_unfilled_blank_files(hands_dir, write_ranges, tmp_path, capsys):
+    ranges = write_ranges({"UTG Open 2bb": {"AA": 1}})
+    (ranges / "HJ Open 2bb.txt").write_text(" \n")
+    assert run("--hands", hands_dir, "--ranges", ranges, "-o", tmp_path / "o.html") == 0
+    out = capsys.readouterr().out
+    assert "對應到節點 1 個" in out and "無法讀取 0、未填（空白檔）1" in out
+    assert "未填（空白檔）：HJ Open 2bb.txt" in out
+
+
+def test_only_blank_range_files_still_outputs_with_exit_0(hands_dir, tmp_path, capsys):
+    ranges = tmp_path / "blank_ranges"
+    ranges.mkdir()
+    (ranges / "UTG Open 2bb.txt").write_text("\n")
+    assert run("--hands", hands_dir, "--ranges", ranges, "-o", tmp_path / "o.html") == 0
+    assert "未填（空白檔）1" in capsys.readouterr().out
+    assert (tmp_path / "o.html").exists()
+
+
 def test_hero_option(hands_dir, ranges_dir, tmp_path, capsys):
     data_path = tmp_path / "m.json"
     args = ("--hands", hands_dir, "--ranges", ranges_dir, "-o", tmp_path / "o.html", "--hero", "p_UTG", "--json", data_path)

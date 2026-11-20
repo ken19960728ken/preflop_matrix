@@ -120,3 +120,89 @@ def test_open_file_without_a_size_still_maps():
     from preflop_matrix.ranges import parse_filename
     key = parse_filename("BTN Open")
     assert key is not None and key.node == "open" and key.pos == "BTN"
+
+
+def _write_bytes(folder, files):
+    for name, data in files.items():
+        (folder / f"{name}.txt").write_bytes(data)
+
+
+@pytest.mark.parametrize("data", [b"", "\ufeff".encode("utf-8"), b" \n\t\r\n ", "\ufeff \n".encode("utf-8"),
+                                  " \u3000\u00a0\u0085".encode("utf-8"), b"\x1c\x1f"])
+def test_blank_file_is_unfilled_not_unreadable_or_duplicate(tmp_path, data):
+    _write_bytes(tmp_path, {"UTG Open 2bb": data})
+    book = load_ranges(tmp_path)
+    assert book.files == 1 and book.ranges == {}
+    assert book.unfilled == ["UTG Open 2bb.txt"]
+    assert book.unreadable == [] and book.duplicates == [] and book.ignored == []
+
+
+def _write_tree(folder, files):
+    for name, data in files.items():
+        (folder / name).parent.mkdir(parents=True, exist_ok=True)
+        (folder / name).write_bytes(data)
+
+
+def test_blank_file_in_an_earlier_folder_does_not_take_the_node(tmp_path):
+    _write_tree(tmp_path, {"a/UTG Open.txt": b"\n", "b/UTG Open 2bb.txt": b"AsAh: 1"})
+    book = load_ranges(tmp_path)
+    assert book.get("open", "UTG", None, "raise")["AA"] == pytest.approx(1 / 6)
+    assert book.unfilled == ["UTG Open.txt"] and book.duplicates == []
+
+
+def test_blank_file_in_a_later_folder_is_unfilled_not_a_duplicate(tmp_path):
+    _write_tree(tmp_path, {"a/UTG Open.txt": b"AsAh: 1", "b/UTG Open 2bb.txt": b" "})
+    book = load_ranges(tmp_path)
+    assert book.get("open", "UTG", None, "raise")["AA"] == pytest.approx(1 / 6)
+    assert book.unfilled == ["UTG Open 2bb.txt"] and book.duplicates == []
+
+
+def test_zero_width_space_is_not_blank_so_the_file_is_unreadable(tmp_path):
+    _write_bytes(tmp_path, {"UTG Open 2bb": "\u200b".encode("utf-8")})
+    book = load_ranges(tmp_path)
+    assert book.unfilled == [] and len(book.unreadable) == 1
+
+
+def test_two_byte_order_marks_are_unreadable_not_unfilled(tmp_path):
+    _write_bytes(tmp_path, {"UTG Open 2bb": "\ufeff\ufeff".encode("utf-8")})
+    book = load_ranges(tmp_path)
+    assert book.unfilled == [] and len(book.unreadable) == 1 and book.ranges == {}
+
+
+def test_blank_multiway_file_is_ignored_not_unfilled(tmp_path):
+    _write_bytes(tmp_path, {"BB vs BTN open 2bb SB call call": b"\n"})
+    book = load_ranges(tmp_path)
+    assert book.ignored == ["BB vs BTN open 2bb SB call call.txt"] and book.unfilled == []
+
+
+def test_unreadable_file_after_the_winner_is_a_duplicate(tmp_path):
+    _write_tree(tmp_path, {"a/UTG Open.txt": b"AsAh: 1", "b/UTG Open 2bb.txt": b"\xff"})
+    book = load_ranges(tmp_path)
+    assert book.duplicates == ["UTG Open 2bb.txt"] and book.unreadable == []
+
+
+def test_two_blank_files_for_one_node_are_both_unfilled(tmp_path):
+    _write_bytes(tmp_path, {"UTG Open": b"", "UTG Open 2bb": b"\n"})
+    book = load_ranges(tmp_path)
+    assert book.ranges == {} and sorted(book.unfilled) == ["UTG Open 2bb.txt", "UTG Open.txt"]
+    assert book.duplicates == []
+
+
+def test_folders_sort_by_path_component_so_a_beats_a_space_b(tmp_path):
+    _write_tree(tmp_path, {"a b/UTG Open.txt": b"KsKh: 1", "a/UTG Open.txt": b"AsAh: 1"})
+    book = load_ranges(tmp_path)
+    assert book.get("open", "UTG", None, "raise")["AA"] == pytest.approx(1 / 6)
+    assert book.get("open", "UTG", None, "raise")["KK"] == 0.0 and book.duplicates == ["UTG Open.txt"]
+
+
+def test_a_folder_named_like_a_range_file_is_unreadable(tmp_path):
+    (tmp_path / "UTG Open 2bb.txt").mkdir()
+    book = load_ranges(tmp_path)
+    assert len(book.unreadable) == 1 and book.ranges == {}
+
+
+def test_only_commas_is_still_a_valid_zero_weight_range(tmp_path):
+    _write_bytes(tmp_path, {"UTG Open 2bb": b",,,"})
+    book = load_ranges(tmp_path)
+    assert book.unfilled == [] and book.unreadable == []
+    assert book.get("open", "UTG", None, "raise") == {h: 0.0 for h in HANDS}

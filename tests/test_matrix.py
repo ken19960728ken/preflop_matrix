@@ -195,3 +195,30 @@ def test_absolute_needs_the_previous_street_to_have_data(write_ranges):
     data = build(write_ranges({}), [make_hand(actions, hero="CO")])
     assert "me" in data["absolute"]["vs_3bet"]["CO>BTN"]
     assert "me" not in data["absolute"]["vs_4bet"]["CO>BTN"]
+
+
+def test_vs_5bet_never_has_theory_even_with_vs_4bet_files(write_ranges):
+    files = {"BB vs UTG open 2bb 3bet 9bb": {"AA": 1, "KK": 1}, "BB vs UTG 4bet 23bb call": {"KK": 1}}
+    data = build(write_ranges(files))
+    assert data["vs_4bet"]["UTG>BB"]["th"] == {"c": pytest.approx(0.5), "r": 0.0}
+    assert data["vs_5bet"]["UTG>BB"]["th"] is None
+    assert all(cell["th"] is None for cell in data["vs_5bet"].values())
+    assert data["meta"]["warnings"] == []
+
+
+def test_absolute_vs_5bet_carries_no_theory_even_when_its_reach_chain_exists(write_ranges):
+    files = {"UTG Open 2bb": {"AA": 1, "KK": 1}, "UTG vs BB 3bet 9bb call": {"AA": 0.5},
+             "UTG vs BB 3bet 9bb 4bet 22bb": {"AA": 0.5},
+             "BB vs UTG open 2bb 3bet 9bb": {"AA": 1, "KK": 1}, "BB vs UTG 4bet 23bb call": {"KK": 1}}
+    absolute = build(write_ranges(files))["absolute"]
+    assert "th" in absolute["vs_3bet"]["UTG>BB"] and "th" in absolute["vs_4bet"]["UTG>BB"]
+    assert all("th" not in row for row in absolute["vs_5bet"].values())
+
+
+def test_vs_5bet_theory_is_not_scaled_or_warned_about(write_ranges):
+    everything = {h: 1 for h in HANDS}
+    files = {"BB vs UTG open 2bb 3bet 9bb": everything, "BB vs UTG 4bet 23bb call": everything,
+             "BB vs UTG 4bet 23bb 5bet 48bb": everything}
+    data = build(write_ranges(files))
+    assert data["vs_5bet"]["UTG>BB"]["th"] is None
+    assert [w for w in data["meta"]["warnings"] if "vs_5bet" in w] == []
